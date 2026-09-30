@@ -51,22 +51,35 @@ def get_study_sessions():
 # Goal:
 #   - Read the learner's username from Flask session storage.
 def get_me():
-    username = 
-#   - Keep a session-based visit counter and increase it on each request.
-#   - Read the non-sensitive "focus_mode" cookie from the incoming request.
-#   - Return username, visits, and focus_mode as JSON.
+    username = session.get("username")
+    #   - Keep a session-based visit counter and increase it on each request.
+    visits = session.get("visits", 0)
+    visits += 1
+    session["visits"] = visits
+    #   - Read the non-sensitive "focus_mode" cookie from the incoming request.
+    focus_mode = request.cookies.get("focus_mode", "standard")
+    #   - Return username, visits, and focus_mode as JSON.
+    return jsonify({"username": username, "visits": visits, "focus_mode": focus_mode}), 200
 # Hint: session.get(...) and request.cookies.get(...) may help.
-
 
 
 # TODO 2 - LOGIN
 # Endpoint: POST /api/login
-# Goal:
-#   - Read JSON sent by the client: {"username": "Amina"}
-#   - Validate that username is not empty.
-#   - Store the username in Flask's session.
-#   - Initialise/reset the visit counter.
-#   - Return useful JSON and the correct status code.
+@app.route("/api/login", methods=["POST"])
+def login():
+    # Goal:
+    #   - Read JSON sent by the client: {"username": "Amina"}
+    data = request.get_json(silent=True) or {}
+    username = str(data.get("username", "")).strip()
+    #   - Validate that username is not empty.
+    if not username:
+        return jsonify({"error": "Username is required."}), 400
+    #   - Store the username in Flask's session.
+    session["username"] = username
+    #   - Initialise/reset the visit counter.
+    session["visits"] = 0
+    #   - Return useful JSON and the correct status code.
+    return jsonify({"message": "Login successful", "username": username}), 201
 # Hint: request.get_json() and session[...] may help.
 
 
@@ -77,50 +90,87 @@ def get_me():
 #   - Clear the current Flask session.
 def logout():
     session.clear()
-#   - Return a success message as JSON.
-return jsonify({"message": "Session cleared. You are logged out."})
+    #   - Return a success message as JSON.
+    return jsonify({"message": "Session cleared. You are logged out."}), 200
 # Hint: Flask session has a method that clears all stored session values.
- 
+
 
 # TODO 4 - CREATE
 # Endpoint: POST /api/study-sessions
-# Goal:
-#   - Read JSON containing topic and minutes.
-#   - Validate the input.
-#   - Create a unique integer id.
-#   - Set completed to False for a new sprint.
-#   - Append the new item to study_sessions.
-#   - Return the created item as JSON.
+@app.route("/api/study-sessions", methods=["POST"])
+def create_study_session():
+    # Goal:
+    #   - Read JSON containing topic and minutes.
+    data = request.get_json(silent=True) or {}
+    topic = str(data.get("topic", "")).strip()
+    if not topic:
+        return jsonify({"error": "Topic is required."}), 400
+    try:
+        minutes = int(data.get("minutes"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Minutes must be a number."}), 400
+    #   - Create a unique integer id.
+    new_id = max((item["id"] for item in study_sessions), default=0) + 1
+    #   - Set completed to False for a new sprint.
+    new_session = {"id": new_id, "topic": topic, "minutes": minutes, "completed": False}
+    #   - Append the new item to study_sessions.
+    study_sessions.append(new_session)
+    #   - Return the created item as JSON.
+    return jsonify(new_session), 201
 # Hint: inspect the JavaScript request body in static/js/app.js.
 
 
 # TODO 5 - UPDATE
 # Endpoint: PATCH /api/study-sessions/<int:session_id>
-# Goal:
-#   - Find the requested sprint using find_study_session(...).
-#   - Return a 404 JSON error when the id does not exist.
-#   - Mark the sprint as completed.
-#   - Return the updated sprint as JSON.
+@app.route("/api/study-sessions/<int:session_id>", methods=["PATCH"])
+def complete_study_session(session_id):
+    # Goal:
+    #   - Find the requested sprint using find_study_session(...).
+    study_session = find_study_session(session_id)
+    #   - Return a 404 JSON error when the id does not exist.
+    if study_session is None:
+        return jsonify({"error": "Study session not found."}), 404
+    #   - Mark the sprint as completed.
+    study_session["completed"] = True
+    #   - Return the updated sprint as JSON.
+    return jsonify(study_session), 200
 
 
 # TODO 6 - DELETE
 # Endpoint: DELETE /api/study-sessions/<int:session_id>
-# Goal:
-#   - Find the requested sprint.
-#   - Return a 404 JSON error when the id does not exist.
-#   - Remove it from study_sessions.
-#   - Return a useful JSON confirmation.
+@app.route("/api/study-sessions/<int:session_id>", methods=["DELETE"])
+def delete_study_session(session_id):
+    # Goal:
+    #   - Find the requested sprint.
+    study_session = find_study_session(session_id)
+    #   - Return a 404 JSON error when the id does not exist.
+    if study_session is None:
+        return jsonify({"error": "Study session not found."}), 404
+    #   - Remove it from study_sessions.
+    study_sessions.remove(study_session)
+    #   - Return a useful JSON confirmation.
+    return jsonify({"message": "Study session deleted.", "deleted": study_session}), 200
 
 
 # TODO 7 - MANUAL COOKIE
 # Endpoint: POST /api/focus-mode
-# Goal:
-#   - Read JSON such as {"mode": "deep"}.
-#   - Accept only: standard, deep, revision, practice.
-#   - Return a 400 JSON error for another value.
-#   - Create a Flask response and set a cookie named "focus_mode".
-#   - Make the cookie last for 7 days.
-#   - Return a JSON success response.
+@app.route("/api/focus-mode", methods=["POST"])
+def set_focus_mode():
+    # Goal:
+    #   - Read JSON such as {"mode": "deep"}.
+    data = request.get_json(silent=True) or {}
+    mode = str(data.get("mode", "")).strip().lower()
+    #   - Accept only: standard, deep, revision, practice.
+    allowed_modes = {"standard", "deep", "revision", "practice"}
+    if mode not in allowed_modes:
+        #   - Return a 400 JSON error for another value.
+        return jsonify({"error": "Invalid focus mode."}), 400
+    #   - Create a Flask response and set a cookie named "focus_mode".
+    response = make_response(jsonify({"message": "Focus mode saved.", "focus_mode": mode}), 200)
+    seven_days = 60 * 60 * 24 * 7
+    response.set_cookie("focus_mode", mode, max_age=seven_days, samesite="Lax")
+    #   - Return a JSON success response.
+    return response
 # Hint: make_response(...) and response.set_cookie(...) may help.
 
 
