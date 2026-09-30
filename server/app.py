@@ -47,12 +47,16 @@ def get_study_sessions():
 
 # TODO 1 - SESSION + COOKIE READ
 # Endpoint: GET /api/me
+@app.route("/api/me", methods=["GET"])
 # Goal:
 #   - Read the learner's username from Flask session storage.
+def get_me():
+    username = 
 #   - Keep a session-based visit counter and increase it on each request.
 #   - Read the non-sensitive "focus_mode" cookie from the incoming request.
 #   - Return username, visits, and focus_mode as JSON.
 # Hint: session.get(...) and request.cookies.get(...) may help.
+
 
 
 # TODO 2 - LOGIN
@@ -68,11 +72,15 @@ def get_study_sessions():
 
 # TODO 3 - LOGOUT
 # Endpoint: POST /api/logout
+@app.route("/api/logout", methods=["POST"])
 # Goal:
 #   - Clear the current Flask session.
+def logout():
+    session.clear()
 #   - Return a success message as JSON.
+return jsonify({"message": "Session cleared. You are logged out."})
 # Hint: Flask session has a method that clears all stored session values.
-
+ 
 
 # TODO 4 - CREATE
 # Endpoint: POST /api/study-sessions
